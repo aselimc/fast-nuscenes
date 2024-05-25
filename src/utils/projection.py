@@ -1,6 +1,8 @@
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, List
 
 import numpy as np
+from copy import deepcopy
+
 from nuscenes.nuscenes import NuScenes
 from nuscenes.utils.data_classes import PointCloud
 from nuscenes.utils.geometry_utils import view_points, transform_matrix
@@ -8,14 +10,43 @@ from nuscenes.utils.geometry_utils import view_points, transform_matrix
 
 def lidar_to_cam(nusc: NuScenes,
                  pcd: PointCloud,
+                 cameras: List[str],
                  lidar_metadata: Dict[str, Any], 
-                 camera_metadata: Dict[str, Any]
+                 camera_metadatas: Dict[str, Any],
+                 normalize: bool = True,
+                 threshold: float = 1.0,
                  ):
+    """
+    Projects the lidar pointcloud into the image plane of the given cameras
     
-    pcd, sensor_to_ego, ego_to_global = transform_pointcloud_global_frame(nusc, pcd, lidar_metadata)
+    Args:
+    - nusc: NuScenes object
+    - pcd: PointCloud object
+    - cameras: List of camera names
+    - lidar_metadata: Lidar metadata dictionary
+    - camera_metadatas: Dictionary of camera metadata dictionaries
+    - normalize: Whether to normalize the points
+    - threshold: Minimum depth value for a point to be considered
     
+    Returns:
+    - projection_metadata: Dictionary containing the projection metadata
+    """
+
+    projection_metadata = {}
+    pcd, sensor_to_ego, ego_to_global = transform_pointcloud_global_frame(nusc, deepcopy(pcd), lidar_metadata)
+    projection_metadata.update({'sensor_to_ego': sensor_to_ego, 'ego_to_global': ego_to_global})
     
-    pass   
+    camera_projections_metadata = {}
+    for camera in cameras:
+        camera_metadata = camera_metadatas[camera]
+        pcd, global_to_ego_image, ego_to_camera, intrinsic = transform_pointcloud_camera_frame(nusc, deepcopy(pcd), camera_metadata)
+        camera_projections_metadata[camera] = {'global_to_ego_image': global_to_ego_image, 'ego_to_camera': ego_to_camera}
+        imsize = (camera_metadata['width'], camera_metadata['height'])
+        indices, points = project_into_image(pcd, intrinsic, imsize, normalize, threshold)
+        camera_projections_metadata[camera].update({'indices': indices, 'points': points})
+    
+    projection_metadata.update({'camera_projections': camera_projections_metadata})
+    return projection_metadata
 
 
 def transform_pointcloud_global_frame(nusc: NuScenes,
@@ -70,6 +101,7 @@ def transform_pointcloud_camera_frame(nusc: NuScenes,
     - pcd: PointCloud object in the camera frame
     - global_to_ego_image: Transformation matrix from global to ego vehicle frame (for image timestamp)
     - ego_to_camera: Transformation matrix from ego vehicle to camera frame
+    - intrinsic: Intrinsic camera matrix
     """
     
     # Get the height and width of the image
@@ -90,8 +122,10 @@ def transform_pointcloud_camera_frame(nusc: NuScenes,
                                      rotation=calibrated_sensor['rotation'],
                                      inverse=True)
     pcd.transform(ego_to_camera)
+    
+    intrinsic = np.array(calibrated_sensor['camera_intrinsic'])
 
-    return pcd, global_to_ego_image, ego_to_camera
+    return pcd, global_to_ego_image, ego_to_camera, intrinsic
 
 
 def project_into_image(pcd: PointCloud,
