@@ -1,11 +1,24 @@
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Tuple
+from numpy.typing import ArrayLike
 
+import numpy as np
+import os.path as osp
 from nuscenes.nuscenes import NuScenes as NuSc
 from nuscenes.utils.splits import create_splits_scenes
+from nuscenes.utils.data_classes import LidarPointCloud
+
+from src.utils import lidar_to_cam
 
 
 class NuScenes(NuSc):
-    def __init__(self, mode: str, dataroot: str, version: str, verbose: bool = True, nusc: NuSc = None, scene: str = None):
+    def __init__(self,
+                 mode: str,
+                 dataroot: str,
+                 version: str,
+                 verbose: bool = True,
+                 nusc: NuSc = None,
+                 scene: str = None,
+                 ann_type: str = None):
         """
         Wrapper around the NuScenes class from the nuscenes-devkit to provide additional functionality
         
@@ -20,7 +33,8 @@ class NuScenes(NuSc):
         """
         assert version in ['v1.0-trainval', 'v1.0-test', 'v1.0-mini'], 'Invalid version'
         assert mode in ['train', 'val', 'test', 'mini_train', 'mini_val', 'train_detect', 'train_track'], 'Invalid mode'
-
+        assert ann_type in [None, 'panoptic', 'semantic'], 'Invalid annotation type'
+        
         if nusc is not None:
             self = nusc
         else:
@@ -50,11 +64,17 @@ class NuScenes(NuSc):
             'projection_metadata': Dict[str, Any],
             'images': Dict[str, PIL.Image],
             'pointcloud': PointCloud,
-            'panoptic_labels' or 'semantic_labels': PointCloud,
+            'panoptic_labels' or 'semantic_labels': PointCloud (Optional),
         }        
         """
         out = {}
         token = self.tokens[idx]
+        sample_metadata = self.get('sample', token)
+        lidar_metadata = self.get('sample_data', sample_metadata['data']['LIDAR_TOP'])
+        camera_metadatas = {camera: self.get('sample_data', sample_metadata['data'][camera]) for camera in self.cameras}
+        pcd, ring_indices = self._get_lidar(lidar_metadata)
+        projection_metadata = lidar_to_cam(self, pcd, self.cameras, lidar_metadata, camera_metadatas)
+        
 
     def __len__(self) -> int:
         return len(self.tokens)
@@ -98,3 +118,17 @@ class NuScenes(NuSc):
             if counts == len(scene_names):
                 return scenes
         return None
+
+    def _get_lidar(self, lidar_metadata: Dict[str, Any]) -> Tuple[LidarPointCloud, ArrayLike]:
+        """
+        Gets the lidar pointcloud for the given metadata
+        
+        Args:
+        - lidar_metadata: Lidar metadata dictionary
+        Returns:
+        - pcd: Lidar pointcloud object
+        - ring_indices: Ring indices of the points [N,]
+        """
+        path = osp.join(self.dataroot, lidar_metadata['filename'])
+        ring_indices = np.fromfile(path, dtype=np.float32).reshape((-1, 5))[:, -1]
+        return LidarPointCloud.from_file(path), ring_indices

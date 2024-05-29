@@ -1,5 +1,6 @@
-import numpy as np
 from numpy.typing import ArrayLike
+
+import numpy as np
 
 
 def apply_transformation(transformation: ArrayLike, input_data: ArrayLike) -> ArrayLike:
