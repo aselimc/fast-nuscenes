@@ -41,7 +41,7 @@ class NuScenes(NuSc):
         assert ann_type in [None, 'panoptic', 'semantic'], 'Invalid annotation type'
         
         if nusc is not None:
-            self = nusc
+            self.__dict__ = nusc.__dict__.copy()
         else:
             super().__init__(dataroot=dataroot, version=version, verbose=verbose)
 
