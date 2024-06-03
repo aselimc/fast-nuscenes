@@ -15,7 +15,7 @@ import matplotlib.cm
 import numpy as np
 from tqdm import trange
 
-from src.utils import apply_transformation
+from fast_nuscenes.utils import apply_transformation
 
 DEFAULT_COLOR = (0, 0, 0)
 

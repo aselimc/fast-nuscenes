@@ -1,8 +1,8 @@
 import unittest
 import numpy as np
 
-from src.nuscenes import NuScenes
-from src.visualizations.image_space import project_labels_to_images
+from fast_nuscenes.nuscenes import NuScenes
+from fast_nuscenes.visualizations.image_space import project_labels_to_images
 
 VERSION = 'v1.0-trainval'
 DATAROOT = '/home/datasets/nuscenes'

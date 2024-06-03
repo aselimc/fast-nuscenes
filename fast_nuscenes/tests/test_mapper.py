@@ -2,7 +2,7 @@ import unittest
 import numpy as np
 from nuscenes.nuscenes import NuScenes
 
-from src.utils import LabelMapper
+from fast_nuscenes.utils import LabelMapper
 
 
 VERSION = 'v1.0-trainval'

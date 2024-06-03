@@ -9,9 +9,9 @@ from nuscenes.utils.data_io import load_bin_file
 from nuscenes.utils.splits import create_splits_scenes
 from nuscenes.utils.data_classes import LidarPointCloud
 
-from src.utils import lidar_to_cam
-from src.utils import LabelMapper
-from src.visualizations.meshlab import MeshlabInf, write
+from fast_nuscenes.utils import lidar_to_cam
+from fast_nuscenes.utils import LabelMapper
+from fast_nuscenes.visualizations.meshlab import MeshlabInf, write
 
 
 class NuScenes(NuSc):
