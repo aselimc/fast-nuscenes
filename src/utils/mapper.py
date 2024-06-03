@@ -50,7 +50,7 @@ class LabelMapper(PanopticClassMapper, LidarsegClassMapper):
             points_label = np.where(points_label % 1000 == 0, stuff_labels, points_label)
             instances = np.unique(points_label)
             for instance in instances:
-                if instance % 1000 == 0:
+                if instance < 1000:
                     continue
                 instance_label = instance % 1000
                 semantic_label = instance // 1000

@@ -1,13 +1,17 @@
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List, Tuple, Optional
 from numpy.typing import ArrayLike
 
 import numpy as np
 import os.path as osp
+from PIL import Image
 from nuscenes.nuscenes import NuScenes as NuSc
+from nuscenes.utils.data_io import load_bin_file
 from nuscenes.utils.splits import create_splits_scenes
 from nuscenes.utils.data_classes import LidarPointCloud
 
 from src.utils import lidar_to_cam
+from src.utils import LabelMapper
+from src.visualizations.meshlab import MeshlabInf, write
 
 
 class NuScenes(NuSc):
@@ -30,6 +34,7 @@ class NuScenes(NuSc):
         - verbose: Whether to print messages (Optional, default: True)
         - nusc: NuScenes object (Optional, default: None)
         - scene: Scene name (Optional, default: None)
+        - ann_type: Annotation type ('panoptic', 'semantic') (Optional, default: None)
         """
         assert version in ['v1.0-trainval', 'v1.0-test', 'v1.0-mini'], 'Invalid version'
         assert mode in ['train', 'val', 'test', 'mini_train', 'mini_val', 'train_detect', 'train_track'], 'Invalid mode'
@@ -42,12 +47,22 @@ class NuScenes(NuSc):
 
         self.mode = mode
         self.scene_name = scene
+        self.annotation_type = ann_type
 
         self.tokens = []
         self.cameras = ['CAM_FRONT', 'CAM_FRONT_LEFT', 'CAM_FRONT_RIGHT', 'CAM_BACK', 'CAM_BACK_LEFT', 'CAM_BACK_RIGHT']
         self.lidar = 'LIDAR_TOP'
         self.radars = ['RADAR_FRONT', 'RADAR_FRONT_LEFT', 'RADAR_FRONT_RIGHT', 'RADAR_BACK_LEFT', 'RADAR_BACK_RIGHT']
         self._get_tokens()
+        self.mesh = MeshlabInf()
+        if ann_type is not None:
+            self.mapper = LabelMapper(self, ann_type)
+        if ann_type == 'semantic':
+            from nuscenes.lidarseg.lidarseg_utils import colormap_to_colors
+            self.colors = colormap_to_colors(colormap=self.colormap, name2idx=self.lidarseg_name2idx_mapping)
+        elif ann_type == 'panoptic':
+            from nuscenes.panoptic.panoptic_utils import generate_panoptic_colors
+            self.colors = generate_panoptic_colors(colormap=self.colormap, name2idx=self.lidarseg_name2idx_mapping)
 
     def __getitem__(self, idx: int) -> Dict[str, Any]:
         """
@@ -64,17 +79,60 @@ class NuScenes(NuSc):
             'projection_metadata': Dict[str, Any],
             'images': Dict[str, PIL.Image],
             'pointcloud': PointCloud,
-            'panoptic_labels' or 'semantic_labels': PointCloud (Optional),
+            'annotations': PointCloud or None,
         }        
         """
         out = {}
         token = self.tokens[idx]
         sample_metadata = self.get('sample', token)
         lidar_metadata = self.get('sample_data', sample_metadata['data']['LIDAR_TOP'])
-        camera_metadatas = {camera: self.get('sample_data', sample_metadata['data'][camera]) for camera in self.cameras}
-        pcd, ring_indices = self._get_lidar(lidar_metadata)
-        projection_metadata = lidar_to_cam(self, pcd, self.cameras, lidar_metadata, camera_metadatas)
+        camera_metadatas = {camera: self.get('sample_data',
+                                             sample_metadata['data'][camera]) for camera in self.cameras}
+        pointcloud, ring_indices = self._get_lidar(lidar_metadata)
+        annotations = self._get_annotations(lidar_metadata)
+        projection_metadata = lidar_to_cam(self, pointcloud, self.cameras, lidar_metadata, camera_metadatas)
+
+        out.update({
+            'sample_metadata': sample_metadata,
+            'lidar_metadata': lidar_metadata,
+            'camera_metadatas': camera_metadatas,
+            'projection_metadata': projection_metadata,
+            'images': self._get_images(camera_metadatas),
+            'pointcloud': pointcloud,
+            'ring_indices': ring_indices,
+            'annotations': annotations
+        })
+        return out
+
+    def visualize(self, output_path: str, pointcloud: ArrayLike, colors: Optional[ArrayLike] = None):
+        """
+        Visualizes the pointcloud using Meshlab
         
+        Args:
+        - output_path: Path to save the visualization
+        - pointcloud: Pointcloud to visualize [N, 3]
+        - colors: Colors for the pointcloud [N, 3] (Optional, default: None)
+        """
+
+        # check if the pointcloud format in the path is .obj
+        assert output_path.endswith('.obj'), 'Output path should be .obj file'
+
+        if colors is not None:
+            write(self.mesh, points=pointcloud, colors=colors, path=output_path)
+        else:
+            write(self.mesh, points=pointcloud, path=output_path)
+
+    def get_colors(self, labels: ArrayLike) -> ArrayLike:
+        """
+        Gets the colors for the given labels
+        
+        Args:
+        - labels: Labels for the pointcloud [N,]
+        Returns:
+        - colors: Colors for the labels [N, 3]
+        """
+
+        return self.colors[labels]
 
     def __len__(self) -> int:
         return len(self.tokens)
@@ -129,6 +187,47 @@ class NuScenes(NuSc):
         - pcd: Lidar pointcloud object
         - ring_indices: Ring indices of the points [N,]
         """
+    
         path = osp.join(self.dataroot, lidar_metadata['filename'])
         ring_indices = np.fromfile(path, dtype=np.float32).reshape((-1, 5))[:, -1]
         return LidarPointCloud.from_file(path), ring_indices
+    
+    def _get_annotations(self, lidar_metadata: Dict[str, Any]) -> ArrayLike:
+        """
+        Gets the annotations for the given lidar metadata
+        
+        Args:
+        - lidar_metadata: Lidar metadata dictionary
+        Returns:
+        - annotations: Annotations for the pointcloud [N, 5]
+        """
+
+        if self.annotation_type == 'panoptic':
+            panoptic_filename = self.get('panoptic', lidar_metadata['token'])['filename']
+            path = osp.join(self.dataroot, panoptic_filename)
+            anns = load_bin_file(path, type='panoptic')
+            anns = self.mapper.convert_label(anns)
+        elif self.annotation_type == 'semantic':
+            semantic_filename = self.get('lidarseg', lidar_metadata['token'])['filename']
+            path = osp.join(self.dataroot, semantic_filename)
+            anns = load_bin_file(path, type='lidarseg')
+            anns = self.mapper.convert_label(anns)
+        else:
+            anns = None
+        return anns
+    
+    def _get_images(self, camera_metadatas: Dict[str, Any]) -> List:
+        """
+        Gets the images for the given camera metadatas
+        
+        Args:
+        - camera_metadatas: Camera metadata dictionary
+        Returns:
+        - images: Images for the camera
+        """
+
+        images = {}
+        for cam, metadata in camera_metadatas.items():
+            path = osp.join(self.dataroot, metadata['filename'])
+            images[cam] = Image.open(path)
+        return images
