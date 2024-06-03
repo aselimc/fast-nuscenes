@@ -40,6 +40,7 @@ for data in nusc:
     # details can be found in the code or tests.
     # {
     #         'sample_metadata': Dict[str, Any],
+    #         'scene_metadata': Dict[str, Any],
     #         'lidar_metadata': Dict[str, Any],
     #         'camera_metadatas': Dict[str, Dict[str, Any]],
     #         'projection_metadata': Dict[str, Any],

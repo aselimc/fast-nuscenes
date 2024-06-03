@@ -74,6 +74,7 @@ class NuScenes(NuSc):
         Returns:
         {
             'sample_metadata': Dict[str, Any],
+            'scene_metadata': Dict[str, Any],
             'lidar_metadata': Dict[str, Any],
             'camera_metadatas': Dict[str, Dict[str, Any]],
             'projection_metadata': Dict[str, Any],
@@ -86,6 +87,7 @@ class NuScenes(NuSc):
         token = self.tokens[idx]
         sample_metadata = self.get('sample', token)
         lidar_metadata = self.get('sample_data', sample_metadata['data']['LIDAR_TOP'])
+        scene_metadata = self.get('scene', sample_metadata['scene_token'])
         camera_metadatas = {camera: self.get('sample_data',
                                              sample_metadata['data'][camera]) for camera in self.cameras}
         pointcloud, ring_indices = self._get_lidar(lidar_metadata)
@@ -94,6 +96,7 @@ class NuScenes(NuSc):
 
         out.update({
             'sample_metadata': sample_metadata,
+            'scene_metadata': scene_metadata,
             'lidar_metadata': lidar_metadata,
             'camera_metadatas': camera_metadatas,
             'projection_metadata': projection_metadata,
