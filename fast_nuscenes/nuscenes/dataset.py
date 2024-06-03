@@ -11,7 +11,7 @@ from nuscenes.utils.data_classes import LidarPointCloud
 
 from fast_nuscenes.utils import lidar_to_cam
 from fast_nuscenes.utils import LabelMapper
-from fast_nuscenes.visualizations.meshlab import MeshlabInf, write
+from fast_nuscenes.visualizations import MeshlabInf, write
 
 
 class NuScenes(NuSc):
