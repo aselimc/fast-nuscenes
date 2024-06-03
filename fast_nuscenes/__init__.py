@@ -1,0 +1,1 @@
+from fast_nuscenes.nuscenes import NuScenes
