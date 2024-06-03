@@ -149,7 +149,10 @@ class NuScenes(NuSc):
         if self.scene_name is not None:
             scene = self._get_scenes([self.scene_name])
             if scene is not None:
-                self.tokens = scene[0]['token']
+                sample_token = scene[0]['first_sample_token']
+                while sample_token:
+                    self.tokens.append(sample_token)
+                    sample_token = self.get('sample', sample_token)['next']
             else:
                 raise ValueError('Scene not found')
         else:

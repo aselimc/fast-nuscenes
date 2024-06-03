@@ -14,7 +14,8 @@ VERBOSE = False
 class TestNuScenes(unittest.TestCase):
     def test_iteration(self):
         nn = NuSc(version=VERSION, dataroot=DATAROOT, verbose=VERBOSE)
-        nusc = NuScenes(mode=MODE, dataroot=DATAROOT, version=VERSION, verbose=VERBOSE, ann_type=ANN_TYPE, nusc=nn)
+        nusc = NuScenes(mode=MODE, dataroot=DATAROOT, version=VERSION, verbose=VERBOSE, ann_type=ANN_TYPE, nusc=nn,
+                        scene='scene-0003')
         expected_keys = ['sample_metadata', 'lidar_metadata', 'camera_metadatas',
                          'projection_metadata', 'images', 'pointcloud', 'annotations', 'ring_indices']
         for data in nusc:
